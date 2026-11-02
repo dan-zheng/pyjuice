@@ -26,6 +26,7 @@ from pyjuice.utils.grad_fns import ReverseGrad
 from pyjuice.utils import BitSet
 from pyjuice.utils.source2fn import make_function_from_src
 from pyjuice.utils.kernel_launcher import triton_jit
+from pyjuice.utils.util import runs_triton
 from pyjuice.utils.fast_inference import param_copies_allowed, register_layer
 from .layer import Layer
 
@@ -412,7 +413,7 @@ class InputLayer(Layer, nn.Module):
 
         assert params.dim() == 1
 
-        if "cuda" in self.device.type:
+        if runs_triton(self.device):
             # Need to flatten data to ensure the memory is aligned following [num_vars, batch_size]
             data = data.reshape(-1).contiguous()
 
@@ -519,7 +520,7 @@ class InputLayer(Layer, nn.Module):
             raise ValueError(f"`node_runs`: a {type(self.dist).__name__} layer runs post-processing kernels over all "
                              f"of its nodes; run its whole layer.")
         self._used_external_params = (params is not None)
-        if "cuda" not in self.device.type:
+        if not runs_triton(self.device):
             raise NotImplementedError("CPU forward fn for input nodes is not implemented.")
 
         data = data.reshape(-1).contiguous()
@@ -640,7 +641,7 @@ class InputLayer(Layer, nn.Module):
 
         assert params.dim() == 1
 
-        if "cuda" in self.device.type:
+        if runs_triton(self.device):
             # Need to flatten data to ensure the memory is aligned following [num_vars, batch_size]
             data = data.reshape(-1).contiguous()
 
@@ -846,7 +847,7 @@ class InputLayer(Layer, nn.Module):
         assert params.dim() == 1
 
         if len(self.dist.sampling_fns) == 0:
-            if "cuda" in self.device.type:
+            if runs_triton(self.device):
 
                 sid, eid = self._output_ind_range
                 tot_num_nodes = node_flows.size(0)
@@ -929,7 +930,7 @@ class InputLayer(Layer, nn.Module):
             # Normalize and update parameters
             with torch.no_grad():
 
-                if "cuda" in self.device.type:
+                if runs_triton(self.device):
 
                     # Accumulate parameter flows of tied nodes
                     for i in range(len(self.tied2source_nids)):
@@ -1000,7 +1001,7 @@ class InputLayer(Layer, nn.Module):
 
         assert params.dim() == 1
 
-        if "cuda" in self.device.type:
+        if runs_triton(self.device):
             node_offset = self._output_ind_range[0]
             layer_num_nodes = self._output_ind_range[1] - self._output_ind_range[0]
 
@@ -1074,7 +1075,7 @@ class InputLayer(Layer, nn.Module):
             sid, eid = self._output_ind_range
             node_flows[sid:eid] /= torch.exp(node_mars[sid:eid])
 
-        if "cuda" in self.device.type:
+        if runs_triton(self.device):
             node_offset = self._output_ind_range[0]
             layer_num_nodes = self._output_ind_range[1] - self._output_ind_range[0]
 
@@ -1145,7 +1146,7 @@ class InputLayer(Layer, nn.Module):
 
         assert not logspace_flows, "Not implemented yet."
 
-        if "cuda" in self.device.type:
+        if runs_triton(self.device):
 
             node_offset = self._output_ind_range[0]
             layer_num_nodes = self._output_ind_range[1] - self._output_ind_range[0]
@@ -1633,7 +1634,9 @@ class InputLayer(Layer, nn.Module):
             return triton_jit(new_fn)
 
     def _get_num_nodes_gcd(self):
-        vids = self.vids.detach().clone().cuda()
+        vids = self.vids.detach().clone()
+        if torch.cuda.is_available():
+            vids = vids.cuda()
 
         max_v = vids.max()
         v = (vids * (max_v ** torch.arange(0, vids.size(1), device = vids.device))[None,:]).sum(dim = 1)

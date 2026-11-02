@@ -79,3 +79,19 @@ def cuda_graph_key(t):
     if t is None:
         return None
     return (t.data_ptr(), tuple(t.shape), tuple(t.stride()), t.dtype)
+
+
+def triton_interpret_enabled() -> bool:
+    """True when Triton runs kernels with its CPU interpreter (`TRITON_INTERPRET=1`)."""
+    import os
+    return os.environ.get("TRITON_INTERPRET", "0") not in ("", "0")
+
+
+def runs_triton(device) -> bool:
+    """
+    Whether Triton kernels can run on tensors of `device`: always on CUDA, and on the CPU when
+    Triton's interpreter is enabled (`TRITON_INTERPRET=1`; slow, for debugging/learning only).
+    """
+    import torch
+    dev_type = device.type if isinstance(device, torch.device) else str(device)
+    return "cuda" in dev_type or (dev_type == "cpu" and triton_interpret_enabled())

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import torch
+from pyjuice.utils.util import triton_interpret_enabled
 import torch.nn as nn
 from collections import OrderedDict
 from functools import partial
@@ -232,7 +233,12 @@ class TensorCircuit(_BuildMixin, _CudaGraphsMixin, _ExternalParamsMixin, _Learni
 
         Batches below 16 run fp32 kernels in every mode. Settable at any time; a recorded CUDA graph is keyed on it.
         """
-        return self.__dict__.get("_precision", "auto")
+        value = self.__dict__.get("_precision", "auto")
+        if value == "auto" and triton_interpret_enabled():
+            # Triton's CPU interpreter executes on NumPy, which has no bfloat16: the bf16 products "auto"
+            # picks from batch 16 come out wrong there (unnormalized likelihoods). Use the fp32 kernels.
+            return "fp32"
+        return value
 
     @precision.setter
     def precision(self, value: str):

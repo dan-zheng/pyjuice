@@ -5,6 +5,7 @@ fills its parameters from the nodes'.
 """
 
 from __future__ import annotations
+import contextlib
 
 import torch
 import torch.nn as nn
@@ -90,12 +91,18 @@ class _BuildMixin:
             print(f"Compiling {num_layers} TensorCircuit layers...")
 
         # Select device to use
-        if device is None:
-            device = torch.cuda.current_device()
-        elif isinstance(device, torch.device):
-            device = device.index
+        # Without CUDA (CPU / `TRITON_INTERPRET=1`), compile on the CPU: the layer compilers already
+        # fall back to CPU code paths when `torch.cuda.is_available()` is False.
+        if not torch.cuda.is_available():
+            device_ctx = contextlib.nullcontext()
+        else:
+            if device is None:
+                device = torch.cuda.current_device()
+            elif isinstance(device, torch.device):
+                device = device.index
+            device_ctx = torch.cuda.device(f"cuda:{device}")
 
-        with torch.cuda.device(f"cuda:{device}"):
+        with device_ctx:
             layer_id = 0
             for depth in tqdm(range(num_layers), disable = not verbose):
                 if depth == 0:

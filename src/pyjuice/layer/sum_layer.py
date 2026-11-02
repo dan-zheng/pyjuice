@@ -222,6 +222,10 @@ _SM_COUNT = {}
 
 
 def _sm_count(device) -> int:
+    if getattr(device, "type", "cuda") != "cuda" or not torch.cuda.is_available():
+        # No GPU (CPU via `TRITON_INTERPRET=1`): only used to size launch grids, so any positive value works
+        import os
+        return os.cpu_count() or 1
     idx = device.index if getattr(device, "index", None) is not None else torch.cuda.current_device()
     n = _SM_COUNT.get(idx)
     if n is None:

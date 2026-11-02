@@ -65,6 +65,12 @@ def _capturing() -> bool:
         return False
 
 
+def _cannot_benchmark() -> bool:
+    """True when launches cannot be timed: no CUDA device (e.g. the CPU via `TRITON_INTERPRET=1`).
+    Every choice then falls back to the reference/heuristic candidate, uncached."""
+    return _capturing() or not torch.cuda.is_available()
+
+
 def _median_time(run, warmup: int, reps: int):
     """Median wall time of `run` in ms, or None if it cannot be launched (e.g. a tile config that
     exceeds this GPU's shared memory raises `OutOfResources` at COMPILE time, before any write)."""
@@ -123,7 +129,7 @@ _CACHE = dict()
 
 
 def _full_key(key):
-    return (torch.cuda.current_device(), key)
+    return (torch.cuda.current_device() if torch.cuda.is_available() else "cpu", key)
 
 
 def set_autotune(enabled: bool = True, clear_cache: bool = False):
@@ -163,7 +169,7 @@ def should_tune(key, num_candidates: int = 2) -> bool:
     """
     if _full_key(key) in _CACHE:
         return False
-    return ENABLED and num_candidates >= 2 and not _capturing()
+    return ENABLED and num_candidates >= 2 and not _cannot_benchmark()
 
 
 def pick(key, candidates: list, bench, warmup: int = 3, reps: int = 7):
@@ -190,7 +196,7 @@ def pick(key, candidates: list, bench, warmup: int = 3, reps: int = 7):
     if cfg is not None:
         return cfg
 
-    if not ENABLED or len(candidates) < 2 or _capturing():
+    if not ENABLED or len(candidates) < 2 or _cannot_benchmark():
         # Not cached on purpose: capture is transient, so a later ordinary call still tunes.
         return candidates[0]
 
@@ -215,7 +221,7 @@ def choose(key, candidates: list):
     choice = _CACHE.get(key)
     if choice is not None:
         return choice
-    if _capturing():
+    if _cannot_benchmark():
         return candidates[0][0]
     choice = best_of(candidates)
     if choice is None:

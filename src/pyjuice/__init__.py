@@ -1,3 +1,8 @@
+# Under Triton's CPU interpreter (`TRITON_INTERPRET=1`), swap in interpreter-safe stand-ins for the
+# libdevice math the kernels use. Must run before any kernel module binds `tlmath`.
+from pyjuice.utils.interpret_math import install as _install_interpret_math
+_install_interpret_math()
+
 import pyjuice.graph
 import pyjuice.nodes
 import pyjuice.distributions
