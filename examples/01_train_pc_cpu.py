@@ -45,6 +45,8 @@ parser.add_argument("--train-size", type = int, default = 1280, help = "training
 parser.add_argument("--valid-size", type = int, default = 512)
 parser.add_argument("--epochs", type = int, default = 5, help = "mini-batch EM epochs")
 parser.add_argument("--data-root", type = str, default = "../data")
+parser.add_argument("--save-dir", type = str, default = ".",
+                    help = "where to save the trained PCs (`pc_minibatch_em.jpc` and `pc_final.jpc`)")
 args = parser.parse_args()
 
 torch.manual_seed(0)
@@ -113,6 +115,10 @@ for epoch in range(1, args.epochs + 1):
     print(f"[Mini-batch EM epoch {epoch}/{args.epochs}][train LL: {train_ll:.2f} ({bpd(train_ll):.3f} bpd); "
           f"val LL: {test_ll:.2f} ({bpd(test_ll):.3f} bpd)].....[train {t1-t0:.1f}s; val {t2-t1:.1f}s]", flush = True)
 
+# Save the PC after mini-batch EM (the full-batch step below can overfit a small training set)
+os.makedirs(args.save_dir, exist_ok = True)
+juice.save(os.path.join(args.save_dir, "pc_minibatch_em.jpc"), pc)
+
 # %%
 # Full-batch EM (one epoch)
 # -------------------------
@@ -132,3 +138,6 @@ test_ll = evaluate()
 t2 = time.time()
 print(f"[Full-batch EM epoch 1/1][train LL: {train_ll:.2f} ({bpd(train_ll):.3f} bpd); "
       f"val LL: {test_ll:.2f} ({bpd(test_ll):.3f} bpd)].....[train {t1-t0:.1f}s; val {t2-t1:.1f}s]", flush = True)
+
+juice.save(os.path.join(args.save_dir, "pc_final.jpc"), pc)
+print(f"Saved the PCs to {os.path.abspath(args.save_dir)}")
